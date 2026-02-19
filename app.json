@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "monApp",
+    "slug": "monApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/mitao-splashscreen.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2196F3"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Cette application a besoin d'accéder à votre localisation pour scanner les réseaux WiFi.",
+        "NSLocationAlwaysUsageDescription": "Cette application a besoin d'accéder à votre localisation pour scanner les réseaux WiFi."
+      }
+    },
+    "android": {
+      "package": "com.monapp.sirene",
+      "minSdkVersion": 26,
+      "targetSdkVersion": 34,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "CHANGE_NETWORK_STATE",
+        "ACCESS_NETWORK_STATE"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "./app.plugin.js"
+    ]
+  }
+}
