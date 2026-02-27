@@ -1,50 +1,32 @@
+// screens/WifiInstructionsScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import React, { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, View, } from 'react-native';
 import CustomButton from '../components/CustomButton';
-import { useTranslation } from '../i18n/useTranslation';
+import { getAudioFiles } from '../services/esp32api';
 import { COLORS } from '../utils/constants';
 
-// Réseaux communs à rechercher
-const COMMON_ESP32_NAMES = [
-  'SIRENE_ESP32_001',
-  'SIRENE_ESP32_002',
-  'TONI',
-  'ESP32',
-];
+export default function WifiInstructionsScreen({ navigation }) {
+  const [isConnected, setIsConnected]   = useState(false);
+  const [networkType, setNetworkType]   = useState(null);
+  const [verifying, setVerifying]       = useState(false);
 
-export default function WifiConnectionScreen({ navigation }) {
-  const { t } = useTranslation();
-  const [currentSSID, setCurrentSSID] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [manualSSID, setManualSSID] = useState('');
+  const isWifi = isConnected && networkType === 'wifi';
 
   useEffect(() => {
     checkConnection();
-    
-    // Écouter les changements de connexion
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsConnected(state.isConnected);
-      if (state.type === 'wifi' && state.details?.ssid) {
-        setCurrentSSID(state.details.ssid);
-      }
+      setNetworkType(state.type);
     });
-
     return () => unsubscribe();
   }, []);
 
   const checkConnection = async () => {
     const state = await NetInfo.fetch();
     setIsConnected(state.isConnected);
-    
-    if (state.type === 'wifi' && state.details?.ssid) {
-      const ssid = state.details.ssid;
-      setCurrentSSID(ssid);
-      console.log('📶 Connecté à:', ssid);
-    }
+    setNetworkType(state.type);
   };
 
   const openWifiSettings = () => {
@@ -57,58 +39,40 @@ export default function WifiConnectionScreen({ navigation }) {
 
   const handleContinue = async () => {
     const state = await NetInfo.fetch();
-    
+
     if (!state.isConnected || state.type !== 'wifi') {
       Alert.alert(
-        t('common.error'),
-        'Vous n\'êtes pas connecté à un réseau WiFi.\n\nVeuillez vous connecter manuellement depuis les paramètres.'
+        'WiFi requis',
+        'Connectez-vous au hotspot de la SIRENE depuis les paramètres WiFi.',
+        [
+          { text: 'Ouvrir paramètres', onPress: openWifiSettings },
+          { text: 'Annuler', style: 'cancel' },
+        ]
       );
       return;
     }
 
-    const ssid = state.details?.ssid || currentSSID;
-    
-    if (!ssid) {
+    // Vérifier que l'ESP32 répond (tenter de récupérer la liste)
+    setVerifying(true);
+    const result = await getAudioFiles();
+    setVerifying(false);
+
+    if (!result.success) {
       Alert.alert(
-        t('common.error'),
-        'Impossible de détecter le nom du réseau WiFi.'
+        '⚠️ Sirène non détectée',
+        `Impossible de joindre la sirène.\n\nVérifiez que vous êtes bien connecté au hotspot de SIRENE.\n\nErreur : ${result.error}`,
+        [
+          { text: 'Ouvrir paramètres WiFi', onPress: openWifiSettings },
+          { text: 'Réessayer', onPress: handleContinue },
+          { text: 'Annuler', style: 'cancel' },
+        ]
       );
       return;
     }
 
-    // Vérifier si c'est un réseau ESP32
-    const isESP32 = ssid.includes('SIRENE_ESP32') || 
-                    ssid.includes('ESP32') || 
-                    manualSSID.includes('SIRENE_ESP32');
-
-    if (isESP32) {
-      Alert.alert(
-        t('common.success'),
-        `Connecté à ${ssid}`,
-        [
-          {
-            text: t('common.ok'),
-            onPress: () => navigation.navigate('Authentication'),
-          },
-        ]
-      );
-    } else {
-      Alert.alert(
-        '⚠️ Réseau non reconnu',
-        `Vous êtes connecté à "${ssid}".\n\nCe n'est pas un réseau SIRENE_ESP32.\n\nVoulez-vous continuer quand même ?`,
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: 'Continuer',
-            onPress: () => navigation.navigate('Authentication'),
-          },
-        ]
-      );
-    }
+    // Tout est OK → aller à la liste audio
+    navigation.navigate('AudioList');
   };
-
-  const isESP32Network = currentSSID && 
-    (currentSSID.includes('SIRENE_ESP32') || currentSSID.includes('ESP32'));
 
   return (
     <KeyboardAvoidingView
@@ -117,72 +81,50 @@ export default function WifiConnectionScreen({ navigation }) {
     >
       {/* Icône principale */}
       <View style={styles.iconContainer}>
-        <Ionicons 
-          name="wifi" 
-          size={80} 
-          color={isConnected ? COLORS.primary : COLORS.textLight} 
+        <Ionicons
+          name="wifi"
+          size={80}
+          color={isWifi ? COLORS.success : COLORS.textLight}
         />
       </View>
 
       {/* Titre */}
-      <Text style={styles.title}>{t('wifi.title')}</Text>
+      <Text style={styles.title}>Connexion au hotspot ESP32</Text>
       <Text style={styles.subtitle}>
-        Connectez-vous manuellement au hotspot ESP32 depuis les paramètres
+        Connectez-vous manuellement au WiFi{' '}
+        <Text style={styles.bold}>SIRENE</Text>
       </Text>
 
-      {/* État de connexion actuel */}
-      {currentSSID ? (
-        <View style={[
-          styles.statusBox,
-          isESP32Network ? styles.statusSuccess : styles.statusWarning
-        ]}>
-          <Ionicons 
-            name={isESP32Network ? 'checkmark-circle' : 'alert-circle'}
-            size={28}
-            color={isESP32Network ? COLORS.success : COLORS.warning}
-          />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.statusTitle}>
-              {isESP32Network ? '✅ Réseau ESP32 détecté' : '⚠️ Réseau actuel'}
-            </Text>
-            <Text style={styles.statusText}>{currentSSID}</Text>
-          </View>
+      {/* Statut connexion */}
+      <View style={[styles.statusBox, isWifi ? styles.statusSuccess : styles.statusWarning]}>
+        <Ionicons
+          name={isWifi ? 'wifi' : 'wifi-outline'}
+          size={28}
+          color={isWifi ? COLORS.success : COLORS.warning}
+        />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.statusTitle}>
+            {isWifi ? '✅ WiFi connecté' : '⚠️ Non connecté au WiFi'}
+          </Text>
+          <Text style={styles.statusText}>
+            {isWifi
+              ? 'Prêt à se connecter à la sirène'
+              : 'Connectez-vous au hotspot SIRENE'}
+          </Text>
         </View>
-      ) : (
-        <View style={[styles.statusBox, styles.statusError]}>
-          <Ionicons name="wifi-outline" size={28} color={COLORS.error} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.statusTitle}>Non connecté</Text>
-            <Text style={styles.statusText}>
-              Veuillez vous connecter à un réseau WiFi
-            </Text>
-          </View>
-        </View>
-      )}
+      </View>
 
       {/* Instructions */}
       <View style={styles.instructionsBox}>
         <Text style={styles.instructionsTitle}>📋 Instructions :</Text>
         <Text style={styles.instructionText}>
           1. Appuyez sur "Ouvrir paramètres WiFi"{'\n'}
-          2. Recherchez un réseau nommé{' '}
-          <Text style={styles.bold}>SIRENE_ESP32_XXX</Text>{'\n'}
+          2. Recherchez le réseau{' '}
+          <Text style={styles.bold}>SIRENE</Text>{'\n'}
           3. Connectez-vous avec le mot de passe{'\n'}
           4. Revenez dans l'application{'\n'}
           5. Appuyez sur "Continuer"
         </Text>
-      </View>
-
-      {/* Entrée manuelle (optionnel) */}
-      <View style={styles.manualEntry}>
-        <Text style={styles.label}>Ou entrez le nom du réseau :</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ex: SIRENE_ESP32_001"
-          value={manualSSID}
-          onChangeText={setManualSSID}
-          autoCapitalize="none"
-        />
       </View>
 
       {/* Boutons */}
@@ -192,27 +134,33 @@ export default function WifiConnectionScreen({ navigation }) {
           onPress={openWifiSettings}
           variant="primary"
         />
-
         <CustomButton
           title="🔄 Vérifier la connexion"
           onPress={checkConnection}
           variant="primary"
-          disabled={loading}
         />
 
-        <CustomButton
-          title="✓ Continuer"
-          onPress={handleContinue}
-          variant="success"
-          disabled={!isConnected}
-        />
+        {/* Bouton continuer avec loader si vérification en cours */}
+        {verifying ? (
+          <View style={styles.verifyingBox}>
+            <ActivityIndicator color={COLORS.primary} />
+            <Text style={styles.verifyingText}>Connexion à la sirène en cours...</Text>
+          </View>
+        ) : (
+          <CustomButton
+            title="✓ Continuer"
+            onPress={handleContinue}
+            variant="success"
+            disabled={!isWifi}
+          />
+        )}
       </View>
 
-      {/* Note simulation */}
-      <View style={styles.simulationNote}>
+      {/* Note */}
+      <View style={styles.note}>
         <Ionicons name="information-circle" size={16} color={COLORS.primary} />
-        <Text style={styles.simulationText}>
-          💡 Mode manuel : Connectez-vous au WiFi depuis les paramètres du téléphone
+        <Text style={styles.noteText}>
+          L'application va vérifier automatiquement que la sirène est accessible avant de continuer.
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -243,6 +191,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
+  bold: {
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
   statusBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,11 +211,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF3E0',
     borderWidth: 2,
     borderColor: COLORS.warning,
-  },
-  statusError: {
-    backgroundColor: '#FFEBEE',
-    borderWidth: 2,
-    borderColor: COLORS.error,
   },
   statusTitle: {
     fontSize: 14,
@@ -297,31 +244,24 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     lineHeight: 22,
   },
-  bold: {
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  manualEntry: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 8,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
   buttonContainer: {
     gap: 12,
   },
-  simulationNote: {
+  verifyingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 14,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 10,
+  },
+  verifyingText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  note: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E3F2FD',
@@ -330,7 +270,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     gap: 8,
   },
-  simulationText: {
+  noteText: {
     flex: 1,
     fontSize: 12,
     color: COLORS.primary,

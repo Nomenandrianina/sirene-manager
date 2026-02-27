@@ -5,7 +5,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-
 import { useTranslation } from '../i18n/useTranslation';
 import AuthenticationScreen from '../screens/AuthenticationScreen';
 import DashboardScreen from '../screens/DashboardScreen';
@@ -122,7 +121,7 @@ function MainDrawer() {
             <Ionicons name="cloud-upload-outline" size={size} color={color} />
           ),
         }}
-      />
+      />  
       <Drawer.Screen
         name="Settings"
         component={SettingsScreen}
